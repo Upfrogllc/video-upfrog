@@ -27,11 +27,18 @@ async function authFetch(path, opts = {}) {
 }
 
 export const api = {
+  // Step 1 of upload: get a Google resumable upload URL
+  createUpload: ({ filename, mimeType, sizeBytes }) =>
+    authFetch('/api/create-upload', {
+      method: 'POST',
+      body: JSON.stringify({ filename, mimeType, sizeBytes })
+    }),
+
   // Video analyses
-  analyzeVideo: ({ mode, youtubeUrl, fileData, mimeType, filename }) =>
+  analyzeVideo: ({ mode, youtubeUrl, fileUri, mimeType, filename }) =>
     authFetch('/api/analyze-video', {
       method: 'POST',
-      body: JSON.stringify({ mode, youtubeUrl, fileData, mimeType, filename })
+      body: JSON.stringify({ mode, youtubeUrl, fileUri, mimeType, filename })
     }),
 
   generateCopy: ({ recordId, clientId, model }) =>
@@ -64,4 +71,3 @@ export const api = {
   archiveClient: (id) =>
     authFetch(`/api/clients?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
-
