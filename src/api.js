@@ -1,12 +1,23 @@
-import netlifyIdentity from 'netlify-identity-widget'
+// Simple password-based auth against the Cloudflare Worker.
 
-// Set this in Netlify env vars: VITE_API_BASE = https://gem-analyzer-api.<your-sub>.workers.dev
 const API_BASE = import.meta.env.VITE_API_BASE || ''
+const PASSWORD_STORAGE_KEY = 'upfrog_gem_password'
+
+export function getPassword() {
+  return sessionStorage.getItem(PASSWORD_STORAGE_KEY) || ''
+}
+
+export function setPassword(pwd) {
+  sessionStorage.setItem(PASSWORD_STORAGE_KEY, pwd)
+}
+
+export function clearPassword() {
+  sessionStorage.removeItem(PASSWORD_STORAGE_KEY)
+}
 
 async function authFetch(path, opts = {}) {
-  const user = netlifyIdentity.currentUser()
-  if (!user) throw new Error('Not signed in')
-  const token = await user.jwt()
+  const pwd = getPassword()
+  if (!pwd) throw new Error('Not signed in')
 
   const isFormData = opts.body instanceof FormData
   const res = await fetch(`${API_BASE}${path}`, {
@@ -14,18 +25,32 @@ async function authFetch(path, opts = {}) {
     headers: {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(opts.headers || {}),
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${pwd}`
     }
   })
 
   const text = await res.text()
   let data
   try { data = text ? JSON.parse(text) : {} } catch { data = { raw: text } }
+
+  if (res.status === 401) {
+    clearPassword()
+    throw new Error('Invalid password — please sign in again')
+  }
+
   if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`)
   return data
 }
 
 export const api = {
+  verifyPassword: async (pwd) => {
+    // Try a cheap request with the password to verify it works
+    const res = await fetch(`${API_BASE}/records`, {
+      headers: { Authorization: `Bearer ${pwd}` }
+    })
+    return res.status !== 401
+  },
+
   analyzeVideoYouTube: (youtubeUrl) =>
     authFetch('/analyze-video', {
       method: 'POST',
@@ -33,39 +58,39 @@ export const api = {
     }),
 
   analyzeVideoUpload: (file, onProgress) => {
-    // Use XHR for upload progress. Gets Identity token first.
-    return new Promise(async (resolve, reject) => {
-      try {
-        const user = netlifyIdentity.currentUser()
-        if (!user) return reject(new Error('Not signed in'))
-        const token = await user.jwt()
+    return new Promise((resolve, reject) => {
+      const pwd = getPassword()
+      if (!pwd) return reject(new Error('Not signed in'))
 
-        const xhr = new XMLHttpRequest()
-        xhr.open('POST', `${API_BASE}/analyze-video`)
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${API_BASE}/analyze-video`)
+      xhr.setRequestHeader('Authorization', `Bearer ${pwd}`)
 
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable && onProgress) {
-            onProgress(Math.round((e.loaded / e.total) * 100))
-          }
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
         }
-
-        xhr.onload = () => {
-          let data
-          try { data = JSON.parse(xhr.responseText) } catch { data = { error: xhr.responseText } }
-          if (xhr.status >= 200 && xhr.status < 300) resolve(data)
-          else reject(new Error(data?.error || `${xhr.status}`))
-        }
-        xhr.onerror = () => reject(new Error('Network error'))
-
-        const form = new FormData()
-        form.append('file', file)
-        form.append('filename', file.name)
-        form.append('mimeType', file.type || 'video/mp4')
-        xhr.send(form)
-      } catch (err) {
-        reject(err)
       }
+
+      xhr.onload = () => {
+        let data
+        try { data = JSON.parse(xhr.responseText) } catch { data = { error: xhr.responseText } }
+        if (xhr.status === 401) {
+          clearPassword()
+          reject(new Error('Invalid password — please sign in again'))
+        } else if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data)
+        } else {
+          reject(new Error(data?.error || `${xhr.status}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('Network error'))
+
+      const form = new FormData()
+      form.append('file', file)
+      form.append('filename', file.name)
+      form.append('mimeType', file.type || 'video/mp4')
+      xhr.send(form)
     })
   },
 
