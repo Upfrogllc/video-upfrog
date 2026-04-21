@@ -1165,3 +1165,225 @@ input, textarea { font-family: inherit; }
 @media (max-width: 450px) {
   .image-grid { grid-template-columns: 1fr; }
 }
+/* ==============================================================
+ * v4 additions: expanded client forms, uploads, colors, brand context
+ * ============================================================== */
+
+.modal-lg { max-width: 720px; }
+
+.form-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form-section:last-of-type { border-bottom: none; padding-bottom: 0; }
+.form-section-head {
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--accent);
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+
+.form-row.three-col {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.input-with-action .url-input { flex: 1; }
+.input-with-action .secondary-btn { white-space: nowrap; }
+
+/* Color picker */
+.color-input {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.color-swatch {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  flex-shrink: 0;
+}
+.color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-swatch::-webkit-color-swatch { border: none; border-radius: 2px; }
+.color-hex { flex: 1; min-width: 0; font-family: var(--mono); }
+
+/* Logo uploader */
+.logo-uploader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.logo-preview img {
+  max-width: 80px;
+  max-height: 48px;
+  object-fit: contain;
+  background: white;
+  padding: 4px;
+  border-radius: 3px;
+}
+.upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px dashed var(--border-bright);
+  color: var(--text-dim);
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.upload-btn:hover { border-color: var(--accent); color: var(--text); }
+
+/* Photos grid */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.photo-tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.photo-remove:hover { background: var(--danger); }
+
+.photo-upload-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  background: var(--bg);
+  border: 1px dashed var(--border-bright);
+  color: var(--text-dim);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  transition: all 150ms;
+}
+.photo-upload-tile:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Client row avatar + completeness chips */
+.client-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.client-avatar img {
+  max-width: 85%;
+  max-height: 85%;
+  object-fit: contain;
+}
+.avatar-initial {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--text-dim);
+}
+.client-row { align-items: center; gap: 12px; }
+.client-completeness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.chip-mini {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: rgba(212, 255, 58, 0.1);
+  color: var(--accent);
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Toggle row (checkbox with inline label text) */
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.toggle-row input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Campaign notes display in generation header */
+.gen-custom {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(212, 255, 58, 0.04);
+  border-left: 2px solid var(--accent);
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.gen-custom .panel-label {
+  margin-right: 6px;
+}
