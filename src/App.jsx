@@ -1,47 +1,27 @@
 import { useEffect, useState } from 'react'
-import netlifyIdentity from 'netlify-identity-widget'
 import Header from './components/Header.jsx'
 import UploadPanel from './components/UploadPanel.jsx'
 import AnalysisCard from './components/AnalysisCard.jsx'
 import DetailModal from './components/DetailModal.jsx'
 import ClientsManager from './components/ClientsManager.jsx'
 import SignInGate from './components/SignInGate.jsx'
-import { api } from './api.js'
+import { api, getPassword, clearPassword } from './api.js'
 
 export default function App() {
-  const [authReady, setAuthReady] = useState(false)
-  const [user, setUser] = useState(null)
-
+  const [authed, setAuthed] = useState(!!getPassword())
   const [records, setRecords] = useState([])
   const [loadingRecords, setLoadingRecords] = useState(false)
-
   const [clients, setClients] = useState([])
   const [loadingClients, setLoadingClients] = useState(false)
-
   const [selected, setSelected] = useState(null)
   const [clientsOpen, setClientsOpen] = useState(false)
   const [topError, setTopError] = useState('')
 
-  // Init Netlify Identity
   useEffect(() => {
-    netlifyIdentity.on('init', (u) => {
-      setUser(u); setAuthReady(true)
-    })
-    netlifyIdentity.on('login', (u) => {
-      setUser(u); netlifyIdentity.close()
-    })
-    netlifyIdentity.on('logout', () => {
-      setUser(null); setRecords([]); setClients([])
-    })
-    netlifyIdentity.init()
-  }, [])
-
-  // Load data when user is present
-  useEffect(() => {
-    if (!user) return
+    if (!authed) return
     loadRecords()
     loadClients()
-  }, [user])
+  }, [authed])
 
   const loadRecords = async () => {
     setLoadingRecords(true); setTopError('')
@@ -50,6 +30,7 @@ export default function App() {
       setRecords(data.records || [])
     } catch (err) {
       setTopError(err.message)
+      if (err.message?.includes('sign in')) setAuthed(false)
     } finally {
       setLoadingRecords(false)
     }
@@ -62,6 +43,7 @@ export default function App() {
       setClients(data.clients || [])
     } catch (err) {
       console.error('Failed to load clients:', err)
+      if (err.message?.includes('sign in')) setAuthed(false)
     } finally {
       setLoadingClients(false)
     }
@@ -73,7 +55,7 @@ export default function App() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this analysis? This also removes all generated ad copy for all clients.')) return
+    if (!confirm('Delete this analysis? This also removes all generated ad copy.')) return
     try {
       await api.deleteRecord(id)
       setRecords((prev) => prev.filter((r) => r.id !== id))
@@ -88,21 +70,24 @@ export default function App() {
     setSelected(updated)
   }
 
-  if (!authReady) {
-    return <div className="loading-screen">Loading…</div>
+  const signOut = () => {
+    clearPassword()
+    setAuthed(false)
+    setRecords([])
+    setClients([])
   }
 
-  if (!user) {
-    return <SignInGate onSignIn={() => netlifyIdentity.open()} />
+  if (!authed) {
+    return <SignInGate onSignIn={() => setAuthed(true)} />
   }
 
   return (
     <div className="app">
       <Header
-        user={user}
+        user={{ email: 'team' }}
         clientCount={clients.length}
         onManageClients={() => setClientsOpen(true)}
-        onSignOut={() => netlifyIdentity.logout()}
+        onSignOut={signOut}
       />
 
       <main className="main">
@@ -161,8 +146,6 @@ export default function App() {
         <span>copy: <code>openai</code></span>
         <span>·</span>
         <span>store: <code>supabase</code></span>
-        <span>·</span>
-        <span>auth: <code>netlify identity</code></span>
       </footer>
     </div>
   )
