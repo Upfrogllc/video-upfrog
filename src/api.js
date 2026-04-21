@@ -99,4 +99,55 @@ export const api = {
   generateImages: ({ recordId, clientId, generationId, quality, includeLogo, customInstructions }) =>
     authFetch('/generate-images', {
       method: 'POST',
-      body: JSON.stringify({ recordId,
+      body: JSON.stringify({ recordId, clientId, generationId, quality, includeLogo, customInstructions })
+    }),
+
+  scrapeWebsite: (url) =>
+    authFetch('/scrape-website', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    }),
+
+  uploadClientAsset: (file, assetType, clientId) => {
+    return new Promise((resolve, reject) => {
+      const pwd = getPassword()
+      if (!pwd) return reject(new Error('Not signed in'))
+
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${API_BASE}/clients/upload-asset`)
+      xhr.setRequestHeader('Authorization', `Bearer ${pwd}`)
+
+      xhr.onload = () => {
+        let data
+        try { data = JSON.parse(xhr.responseText) } catch { data = { error: xhr.responseText } }
+        if (xhr.status === 401) {
+          clearPassword()
+          reject(new Error('Invalid password'))
+        } else if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data)
+        } else {
+          reject(new Error(data?.error || `${xhr.status}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('Network error'))
+
+      const form = new FormData()
+      form.append('file', file)
+      form.append('assetType', assetType)
+      form.append('clientId', clientId || 'pending')
+      xhr.send(form)
+    })
+  },
+
+  listRecords: () => authFetch('/records'),
+  deleteRecord: (id) => authFetch(`/records?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  listClients: ({ includeArchived = false } = {}) =>
+    authFetch(`/clients${includeArchived ? '?includeArchived=1' : ''}`),
+  createClient: (fields) =>
+    authFetch('/clients', { method: 'POST', body: JSON.stringify(fields) }),
+  updateClient: (id, fields) =>
+    authFetch(`/clients?id=${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(fields) }),
+  archiveClient: (id) =>
+    authFetch(`/clients?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
