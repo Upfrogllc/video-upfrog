@@ -6,11 +6,9 @@ const PASSWORD_STORAGE_KEY = 'upfrog_gem_password'
 export function getPassword() {
   return sessionStorage.getItem(PASSWORD_STORAGE_KEY) || ''
 }
-
 export function setPassword(pwd) {
   sessionStorage.setItem(PASSWORD_STORAGE_KEY, pwd)
 }
-
 export function clearPassword() {
   sessionStorage.removeItem(PASSWORD_STORAGE_KEY)
 }
@@ -37,14 +35,12 @@ async function authFetch(path, opts = {}) {
     clearPassword()
     throw new Error('Invalid password — please sign in again')
   }
-
   if (!res.ok) throw new Error(data?.error || `${res.status} ${res.statusText}`)
   return data
 }
 
 export const api = {
   verifyPassword: async (pwd) => {
-    // Try a cheap request with the password to verify it works
     const res = await fetch(`${API_BASE}/records`, {
       headers: { Authorization: `Bearer ${pwd}` }
     })
@@ -98,6 +94,12 @@ export const api = {
     authFetch('/generate-copy', {
       method: 'POST',
       body: JSON.stringify({ recordId, clientId, model })
+    }),
+
+  generateImages: ({ recordId, clientId, generationId, quality }) =>
+    authFetch('/generate-images', {
+      method: 'POST',
+      body: JSON.stringify({ recordId, clientId, generationId, quality })
     }),
 
   listRecords: () => authFetch('/records'),
