@@ -90,27 +90,13 @@ export const api = {
     })
   },
 
-  generateCopy: ({ recordId, clientId, model }) =>
+  generateCopy: ({ recordId, clientId, model, customInstructions }) =>
     authFetch('/generate-copy', {
       method: 'POST',
-      body: JSON.stringify({ recordId, clientId, model })
+      body: JSON.stringify({ recordId, clientId, model, customInstructions })
     }),
 
-  generateImages: ({ recordId, clientId, generationId, quality }) =>
+  generateImages: ({ recordId, clientId, generationId, quality, includeLogo, customInstructions }) =>
     authFetch('/generate-images', {
       method: 'POST',
-      body: JSON.stringify({ recordId, clientId, generationId, quality })
-    }),
-
-  listRecords: () => authFetch('/records'),
-  deleteRecord: (id) => authFetch(`/records?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
-
-  listClients: ({ includeArchived = false } = {}) =>
-    authFetch(`/clients${includeArchived ? '?includeArchived=1' : ''}`),
-  createClient: (fields) =>
-    authFetch('/clients', { method: 'POST', body: JSON.stringify(fields) }),
-  updateClient: (id, fields) =>
-    authFetch(`/clients?id=${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(fields) }),
-  archiveClient: (id) =>
-    authFetch(`/clients?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-}
+      body: JSON.stringify({ recordId,
