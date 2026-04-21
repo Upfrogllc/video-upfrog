@@ -17,6 +17,7 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
   const [error, setError] = useState('')
   const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const [customInstructions, setCustomInstructions] = useState('')
   const [showGenerator, setShowGenerator] = useState(false)
 
   const generations = Array.isArray(record.copy_generations) ? record.copy_generations : []
@@ -49,12 +50,14 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
       const result = await api.generateCopy({
         recordId: record.id,
         clientId: selectedClientId,
-        model: selectedModel
+        model: selectedModel,
+        customInstructions: customInstructions.trim() || undefined
       })
       onUpdate(result.record)
       setTab('copy')
       setSelectedGenIdx(0)
       setShowGenerator(false)
+      setCustomInstructions('')
     } catch (err) {
       setError(err.message || 'Copy generation failed')
     } finally {
@@ -78,14 +81,10 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
         </div>
 
         <div className="modal-tabs">
-          <button
-            className={`mtab ${tab === 'analysis' ? 'active' : ''}`}
-            onClick={() => setTab('analysis')}
-          >GEM Analysis</button>
-          <button
-            className={`mtab ${tab === 'copy' ? 'active' : ''}`}
-            onClick={() => setTab('copy')}
-          >
+          <button className={`mtab ${tab === 'analysis' ? 'active' : ''}`} onClick={() => setTab('analysis')}>
+            GEM Analysis
+          </button>
+          <button className={`mtab ${tab === 'copy' ? 'active' : ''}`} onClick={() => setTab('copy')}>
             Ad Copy
             {generations.length > 0 && <span className="tab-count">{generations.length}</span>}
           </button>
@@ -95,12 +94,8 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
           {tab === 'analysis' && (
             <div>
               <div className="analysis-actions">
-                <button className="secondary-btn sm" onClick={handleCopyTSV}>
-                  Copy as TSV (→ Sheets A–Z)
-                </button>
-                <button className="secondary-btn sm" onClick={handleCopyRaw}>
-                  Copy raw pipe row
-                </button>
+                <button className="secondary-btn sm" onClick={handleCopyTSV}>Copy as TSV (→ Sheets A–Z)</button>
+                <button className="secondary-btn sm" onClick={handleCopyRaw}>Copy raw pipe row</button>
               </div>
               <table className="gem-table">
                 <tbody>
@@ -135,11 +130,7 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
                     </select>
                   </div>
                 )}
-                <button
-                  className="run-btn sm"
-                  onClick={() => setShowGenerator(!showGenerator)}
-                  disabled={generating}
-                >
+                <button className="run-btn sm" onClick={() => setShowGenerator(!showGenerator)} disabled={generating}>
                   {showGenerator ? 'Cancel' : '+ Generate for client'}
                 </button>
               </div>
@@ -187,12 +178,24 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
                           </select>
                         </div>
                       </div>
+
+                      <div className="form-field">
+                        <label>
+                          Campaign-specific instructions <span style={{ color: 'var(--text-faint)', fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+                        </label>
+                        <textarea
+                          className="prompt-input"
+                          rows={3}
+                          value={customInstructions}
+                          onChange={(e) => setCustomInstructions(e.target.value)}
+                          disabled={generating}
+                          placeholder="e.g., 'Black Friday sale — 40% off. Emphasize urgency.' or 'Focus on the new financing offer, avoid mentioning prices.'"
+                        />
+                      </div>
+
                       {error && <div className="inline-error">{error}</div>}
-                      <button
-                        className="run-btn"
-                        onClick={runGenerate}
-                        disabled={generating || !selectedClientId}
-                      >
+
+                      <button className="run-btn" onClick={runGenerate} disabled={generating || !selectedClientId}>
                         {generating
                           ? <><span className="spinner" /> Generating…</>
                           : <>Generate copy <span className="arrow">→</span></>
@@ -211,6 +214,11 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
                       <div className="gen-meta">
                         {[currentGen.client_vertical, currentGen.client_location].filter(Boolean).join(' · ')}
                       </div>
+                      {currentGen.custom_instructions && (
+                        <div className="gen-custom">
+                          <span className="panel-label">Campaign notes:</span> {currentGen.custom_instructions}
+                        </div>
+                      )}
                     </div>
                     <div className="gen-stamp">
                       <div className="gen-model">{currentGen.model}</div>
@@ -223,12 +231,7 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
 
                   <div className="copy-sections">
                     {AD_COPY_SECTIONS.map((sec) => (
-                      <AdCopyBlock
-                        key={sec.key}
-                        label={sec.label}
-                        desc={sec.desc}
-                        body={currentGen[sec.key]}
-                      />
+                      <AdCopyBlock key={sec.key} label={sec.label} desc={sec.desc} body={currentGen[sec.key]} />
                     ))}
 
                     {Array.isArray(currentGen.headlines) && currentGen.headlines.length > 0 && (
@@ -243,22 +246,14 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
                           {currentGen.headlines.map((h, i) => (
                             <li key={i}>
                               <span>{h}</span>
-                              <button
-                                className="link-btn"
-                                onClick={() => navigator.clipboard.writeText(h)}
-                              >copy</button>
+                              <button className="link-btn" onClick={() => navigator.clipboard.writeText(h)}>copy</button>
                             </li>
                           ))}
                         </ol>
                       </div>
                     )}
 
-                    {/* NEW: Image package generator */}
-                    <ImagePackage
-                      record={record}
-                      generation={currentGen}
-                      onUpdate={onUpdate}
-                    />
+                    <ImagePackage record={record} generation={currentGen} clients={clients} onUpdate={onUpdate} />
                   </div>
                 </div>
               )}
@@ -279,10 +274,7 @@ function AdCopyBlock({ label, desc, body }) {
           <div className="cb-label">{label}</div>
           <div className="cb-desc">{desc}</div>
         </div>
-        <button
-          className="link-btn"
-          onClick={() => navigator.clipboard.writeText(body)}
-        >copy</button>
+        <button className="link-btn" onClick={() => navigator.clipboard.writeText(body)}>copy</button>
       </div>
       <div className="copy-block-body">{body}</div>
     </div>
