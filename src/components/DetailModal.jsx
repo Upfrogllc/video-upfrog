@@ -167,3 +167,124 @@ export default function DetailModal({ record, clients, onClose, onUpdate }) {
                                 {c.business_name}
                                 {c.location ? ` · ${c.location}` : ''}
                                 {c.vertical ? ` · ${c.vertical}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label>OpenAI model</label>
+                          <select
+                            className="select"
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                            disabled={generating}
+                          >
+                            {OPENAI_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label} — {m.desc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      {error && <div className="inline-error">{error}</div>}
+                      <button
+                        className="run-btn"
+                        onClick={runGenerate}
+                        disabled={generating || !selectedClientId}
+                      >
+                        {generating
+                          ? <><span className="spinner" /> Generating…</>
+                          : <>Generate copy <span className="arrow">→</span></>
+                        }
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {currentGen && !showGenerator && (
+                <div className="gen-display">
+                  <div className="gen-header">
+                    <div>
+                      <div className="gen-brand">{currentGen.client_name}</div>
+                      <div className="gen-meta">
+                        {[currentGen.client_vertical, currentGen.client_location].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    <div className="gen-stamp">
+                      <div className="gen-model">{currentGen.model}</div>
+                      <div className="gen-date">
+                        by {currentGen.created_by_email?.split('@')[0] || 'unknown'} ·
+                        {' ' + new Date(currentGen.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="copy-sections">
+                    {AD_COPY_SECTIONS.map((sec) => (
+                      <AdCopyBlock
+                        key={sec.key}
+                        label={sec.label}
+                        desc={sec.desc}
+                        body={currentGen[sec.key]}
+                      />
+                    ))}
+
+                    {Array.isArray(currentGen.headlines) && currentGen.headlines.length > 0 && (
+                      <div className="copy-block headlines">
+                        <div className="copy-block-head">
+                          <div>
+                            <div className="cb-label">Headlines</div>
+                            <div className="cb-desc">Max 8 words · Meta click-through</div>
+                          </div>
+                        </div>
+                        <ol className="headline-list">
+                          {currentGen.headlines.map((h, i) => (
+                            <li key={i}>
+                              <span>{h}</span>
+                              <button
+                                className="link-btn"
+                                onClick={() => navigator.clipboard.writeText(h)}
+                              >copy</button>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* NEW: Image package generator */}
+                    <ImagePackage
+                      record={record}
+                      generation={currentGen}
+                      onUpdate={onUpdate}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AdCopyBlock({ label, desc, body }) {
+  if (!body) return null
+  return (
+    <div className="copy-block">
+      <div className="copy-block-head">
+        <div>
+          <div className="cb-label">{label}</div>
+          <div className="cb-desc">{desc}</div>
+        </div>
+        <button
+          className="link-btn"
+          onClick={() => navigator.clipboard.writeText(body)}
+        >copy</button>
+      </div>
+      <div className="copy-block-body">{body}</div>
+    </div>
+  )
+}
