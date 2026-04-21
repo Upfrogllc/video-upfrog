@@ -1,7 +1,10 @@
 // POST /api/analyze-video
-// Body: { mode: 'youtube'|'upload', youtubeUrl?, fileData?, mimeType?, filename? }
+// Body: { mode: 'youtube'|'upload', youtubeUrl?, fileUri?, mimeType?, filename? }
 // Auth: Netlify Identity JWT required
 // Returns: { record }  (newly inserted Supabase row)
+//
+// For upload mode, the browser uploads the video directly to Google's File API
+// first (via create-upload.js) and passes us the resulting fileUri.
 
 const { respond, preflight, requireAuth, supabaseRequest } = require('./_shared.js')
 
@@ -93,7 +96,7 @@ exports.handler = async (event, context) => {
   try { payload = JSON.parse(event.body || '{}') }
   catch { return respond(400, { error: 'Invalid JSON body' }) }
 
-  const { mode, youtubeUrl, fileData, mimeType, filename } = payload
+  const { mode, youtubeUrl, fileUri, mimeType, filename } = payload
 
   if (mode !== 'youtube' && mode !== 'upload') {
     return respond(400, { error: 'mode must be "youtube" or "upload"' })
@@ -109,10 +112,22 @@ exports.handler = async (event, context) => {
     videoPart = { fileData: { fileUri: youtubeUrl, mimeType: 'video/mp4' } }
     sourceLabel = youtubeUrl
   } else {
-    if (!fileData || !mimeType) {
-      return respond(400, { error: 'Missing fileData or mimeType for upload mode' })
+    if (!fileUri) {
+      return respond(400, { error: 'Missing fileUri for upload mode. Upload the file to Google first via /api/create-upload.' })
     }
-    videoPart = { inlineData: { mimeType, data: fileData } }
+
+    // Gemini requires the uploaded file to be in ACTIVE state before analysis.
+    // We poll briefly (up to ~25s) to give processing time. Most MP4s go active
+    // within a few seconds; large or complex videos may take longer.
+    try {
+      await waitForFileActive(fileUri, process.env.GEMINI_API_KEY)
+    } catch (err) {
+      return respond(504, {
+        error: `File not ready for analysis: ${err.message}. Try again in a moment.`
+      })
+    }
+
+    videoPart = { fileData: { fileUri, mimeType: mimeType || 'video/mp4' } }
     sourceLabel = filename || 'uploaded-video'
   }
 
@@ -148,7 +163,6 @@ exports.handler = async (event, context) => {
     const parts = candidates[0]?.content?.parts || []
     const raw = parts.filter((p) => typeof p.text === 'string').map((p) => p.text).join('').trim()
 
-    // Extract the first line that looks like a pipe row (defensive: strip accidental markdown fences)
     gemRow = raw
       .replace(/```[\w]*\n?/g, '')
       .replace(/```/g, '')
@@ -169,7 +183,7 @@ exports.handler = async (event, context) => {
         source: mode,
         source_label: sourceLabel,
         gem_row: gemRow,
-        ad_copy: null,
+        copy_generations: [],
         created_by_id: user.id,
         created_by_email: user.email,
         usage_metadata: usage || null
@@ -189,3 +203,24 @@ function isValidYouTubeUrl(url) {
   } catch { return false }
 }
 
+async function waitForFileActive(fileUri, apiKey) {
+  // fileUri looks like: https://generativelanguage.googleapis.com/v1beta/files/abc123
+  // We poll the same URL to check state.
+  const maxAttempts = 12
+  const delayMs = 2000
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await fetch(`${fileUri}?key=${apiKey}`)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`status check failed: ${text.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    if (data.state === 'ACTIVE') return data
+    if (data.state === 'FAILED') {
+      throw new Error('Google failed to process the video')
+    }
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  throw new Error('timeout waiting for video to become active')
+}
