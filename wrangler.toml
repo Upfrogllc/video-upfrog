@@ -1,0 +1,17 @@
+name = "gem-analyzer-api"
+main = "src/index.js"
+compatibility_date = "2025-04-01"
+
+# Limits on Workers Paid plan: 100MB request body
+# Your existing upfrog-proxy runs on the same plan
+
+[vars]
+NETLIFY_SITE_ID = "6428a973-a9d7-4ff8-bf5b-23e46ca52d29"
+# Allowed origin for CORS. Change if your domain changes.
+ALLOWED_ORIGIN = "https://videoupfrog.netlify.app"
+
+# Secrets (set via: wrangler secret put GEMINI_API_KEY, etc.):
+# - GEMINI_API_KEY
+# - OPENAI_API_KEY
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_KEY
