@@ -1,18 +1,22 @@
 import { useRef, useState } from 'react'
 import { api } from '../api.js'
 
+const MAX_FILE_SIZE = 500 * 1024 * 1024 // 500 MB soft cap in UI; Gemini accepts up to 2GB
+
 export default function UploadPanel({ onAnalysisComplete }) {
   const [mode, setMode] = useState('youtube')
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle')
+  // status flow (upload mode): idle → requesting → uploading (with progress) → processing → idle
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const fileInputRef = useRef(null)
-
-  const isRunning = status === 'uploading' || status === 'analyzing'
-
   const tickRef = useRef(null)
+
+  const isRunning = status !== 'idle'
+
   const startTick = () => {
     const t0 = Date.now()
     setElapsed(0)
@@ -23,9 +27,8 @@ export default function UploadPanel({ onAnalysisComplete }) {
   const handleFileChange = (e) => {
     const f = e.target.files?.[0]
     if (!f) return
-    const MAX = 20 * 1024 * 1024
-    if (f.size > MAX) {
-      setError(`File is ${(f.size / 1024 / 1024).toFixed(1)}MB. Max 20MB via this upload path — use a YouTube URL for bigger videos.`)
+    if (f.size > MAX_FILE_SIZE) {
+      setError(`File is ${(f.size / 1024 / 1024).toFixed(1)}MB. Max 500MB.`)
       return
     }
     setFile(f)
@@ -34,37 +37,65 @@ export default function UploadPanel({ onAnalysisComplete }) {
 
   const run = async () => {
     setError('')
-    if (mode === 'youtube' && !youtubeUrl.trim()) { setError('Paste a YouTube URL'); return }
-    if (mode === 'upload' && !file) { setError('Pick a video file'); return }
+    if (mode === 'youtube' && !youtubeUrl.trim()) {
+      setError('Paste a YouTube URL'); return
+    }
+    if (mode === 'upload' && !file) {
+      setError('Pick a video file'); return
+    }
 
     try {
-      let payload
+      startTick()
+
       if (mode === 'youtube') {
-        setStatus('analyzing'); startTick()
-        payload = { mode: 'youtube', youtubeUrl: youtubeUrl.trim() }
+        setStatus('processing')
+        const result = await api.analyzeVideo({
+          mode: 'youtube',
+          youtubeUrl: youtubeUrl.trim()
+        })
+        onAnalysisComplete(result.record)
+        setYoutubeUrl('')
       } else {
-        setStatus('uploading'); startTick()
-        const base64 = await fileToBase64(file)
-        setStatus('analyzing')
-        payload = {
+        // 1. Ask our function for a Google upload URL
+        setStatus('requesting')
+        const { uploadUrl } = await api.createUpload({
+          filename: file.name,
+          mimeType: file.type || 'video/mp4',
+          sizeBytes: file.size
+        })
+
+        // 2. Upload the file directly to Google (bypasses Netlify)
+        setStatus('uploading')
+        setUploadProgress(0)
+        const fileUri = await uploadToGoogle(file, uploadUrl, setUploadProgress)
+
+        // 3. Ask our function to analyze the uploaded file
+        setStatus('processing')
+        const result = await api.analyzeVideo({
           mode: 'upload',
-          fileData: base64,
+          fileUri,
           mimeType: file.type || 'video/mp4',
           filename: file.name
-        }
+        })
+        onAnalysisComplete(result.record)
+        setFile(null)
       }
 
-      const result = await api.analyzeVideo(payload)
       stopTick()
       setStatus('idle')
-
-      // reset inputs
-      setYoutubeUrl(''); setFile(null)
-      onAnalysisComplete(result.record)
     } catch (err) {
       stopTick()
       setStatus('idle')
       setError(err.message || 'Something broke. Check the function logs.')
+    }
+  }
+
+  const statusLabel = () => {
+    switch (status) {
+      case 'requesting': return 'preparing upload'
+      case 'uploading': return `uploading ${uploadProgress}%`
+      case 'processing': return 'analyzing with gemini'
+      default: return status
     }
   }
 
@@ -74,7 +105,7 @@ export default function UploadPanel({ onAnalysisComplete }) {
         <span className="panel-label">New analysis</span>
         {isRunning && (
           <span className="elapsed">
-            <span className="pulse-dot" /> {status} · {elapsed}s
+            <span className="pulse-dot" /> {statusLabel()} · {elapsed}s
           </span>
         )}
       </div>
@@ -126,7 +157,7 @@ export default function UploadPanel({ onAnalysisComplete }) {
           ) : (
             <>
               <div className="drop-title">Drop video here</div>
-              <div className="drop-sub">or click to browse · MP4, MOV, WebM up to 20MB</div>
+              <div className="drop-sub">or click to browse · MP4, MOV, WebM up to 500MB</div>
             </>
           )}
           <input
@@ -139,11 +170,17 @@ export default function UploadPanel({ onAnalysisComplete }) {
         </div>
       )}
 
+      {status === 'uploading' && (
+        <div className="progress-bar">
+          <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+        </div>
+      )}
+
       {error && <div className="inline-error">{error}</div>}
 
       <button className="run-btn" onClick={run} disabled={isRunning}>
         {isRunning ? (
-          <><span className="spinner" /> Running GEM analysis…</>
+          <><span className="spinner" /> {statusLabel()}…</>
         ) : (
           <>Run GEM analysis <span className="arrow">→</span></>
         )}
@@ -152,11 +189,43 @@ export default function UploadPanel({ onAnalysisComplete }) {
   )
 }
 
-function fileToBase64(file) {
+// Upload a file directly to Google's resumable upload URL with progress tracking.
+// Returns the final fileUri on success.
+function uploadToGoogle(file, uploadUrl, onProgress) {
   return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(r.result.split(',')[1])
-    r.onerror = reject
-    r.readAsDataURL(file)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', uploadUrl)
+    xhr.setRequestHeader('Content-Length', String(file.size))
+    xhr.setRequestHeader('X-Goog-Upload-Offset', '0')
+    xhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize')
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const body = JSON.parse(xhr.responseText)
+          const fileUri = body?.file?.uri
+          if (!fileUri) {
+            reject(new Error('Google upload succeeded but returned no fileUri'))
+            return
+          }
+          resolve(fileUri)
+        } catch (err) {
+          reject(new Error(`Could not parse Google response: ${err.message}`))
+        }
+      } else {
+        reject(new Error(`Google upload failed: ${xhr.status} ${xhr.responseText?.slice(0, 200)}`))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    xhr.onabort = () => reject(new Error('Upload aborted'))
+
+    xhr.send(file)
   })
 }
